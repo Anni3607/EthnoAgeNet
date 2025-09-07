@@ -11,7 +11,7 @@ from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
 # Build model (must match training)
 # -------------------
 def build_model():
-    base_model = EfficientNetB0(weights=None, include_top=False, input_shape=(128,128,3))  # RGB, not grayscale
+    base_model = EfficientNetB0(weights=None, include_top=False, input_shape=(128,128,3))  # RGB input
     x = base_model.output
     x = GlobalAveragePooling2D()(x)
     x = Dropout(0.5)(x)
@@ -26,7 +26,7 @@ def build_model():
     return model
 
 # -------------------
-# Load weights (not full model, to avoid Keras3 issues)
+# Load weights (not the whole model)
 # -------------------
 model = build_model()
 model.load_weights("EthnoAgeNet.h5")
