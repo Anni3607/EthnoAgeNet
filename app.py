@@ -1,69 +1,64 @@
+
 import streamlit as st
-import cv2
 import numpy as np
+import cv2
 import tensorflow as tf
-from tensorflow.keras.layers import Input, Conv2D, Dropout, BatchNormalization, MaxPooling2D, Flatten, Dense
 from tensorflow.keras.models import Model
+from tensorflow.keras.applications import EfficientNetB0
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
 
-# Step 1: Define the function that builds the model architecture
-# This must match the original model exactly.
-def create_model_architecture():
-    # Define the input shape. Based on the previous error, the model was trained
-    # with 3-channel (color) images, likely 128x128 pixels.
-    inputs = Input(shape=(128, 128, 3))
-    
-    # Add your layers here. This is a placeholder; you must replace it with your
-    # actual layers and their parameters (filters, kernel size, activation, etc.).
-    x = Conv2D(32, (3, 3), activation='relu', padding='same')(inputs)
-    x = BatchNormalization()(x)
-    x = MaxPooling2D(pool_size=(2, 2))(x)
-    
-    x = Conv2D(64, (3, 3), activation='relu', padding='same')(x)
-    x = BatchNormalization()(x)
-    x = MaxPooling2D(pool_size=(2, 2))(x)
-    x = Dropout(0.4)(x) # The problematic layer from the previous log
-    
-    # Add more layers as needed from your original model
-    
-    x = Flatten()(x)
-    
-    # Assuming two output heads for age and ethnicity
-    age_output = Dense(1, activation='linear', name='age_output')(x) # Use linear activation for regression
-    ethnicity_output = Dense(5, activation='softmax', name='ethnicity_output')(x) # Use softmax for classification
+# -------------------
+# Build model (same as training)
+# -------------------
+def build_model():
+    base_model = EfficientNetB0(weights=None, include_top=False, input_shape=(128,128,3))
+    x = base_model.output
+    x = GlobalAveragePooling2D()(x)
+    x = Dropout(0.5)(x)
 
-    model = Model(inputs=inputs, outputs=[age_output, ethnicity_output])
+    # Age head (regression)
+    age_output = Dense(1, activation='linear', name='age_output')(x)
+
+    # Ethnicity head (classification)
+    ethnicity_output = Dense(5, activation='softmax', name='ethnicity_output')(x)
+
+    model = Model(inputs=base_model.input, outputs=[age_output, ethnicity_output])
     return model
 
-# Step 2: Manually build the model and load the weights
-# This bypasses the broken architecture in the H5 file.
-try:
-    # First, try loading the model normally
-    model = tf.keras.models.load_model("EthnoAgeNet.h5")
-except:
-    # If a ValueError or other error occurs, build the model from scratch
-    # and load only the weights.
-    model = create_model_architecture()
-    model.load_weights("EthnoAgeNet.h5")
+# -------------------
+# Load model + weights
+# -------------------
+model = build_model()
+model.load_weights("EthnoAgeNet.h5")  # load only weights
 
-st.title("EthnoAgeNet - Age & Ethnicity Prediction")
+# -------------------
+# Streamlit UI
+# -------------------
+st.title("EthnoAgeNet: Age & Ethnicity Prediction")
 
 uploaded_file = st.file_uploader("Upload a face image", type=["jpg", "jpeg", "png"])
 
-if uploaded_file:
-    # Image preprocessing code from your previous message
+if uploaded_file is not None:
+    # Read image
     file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-    img = cv2.imdecode(file_bytes, 1) # Read as a 3-channel color image
+    img = cv2.imdecode(file_bytes, 1)  # read as BGR
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    img_resized = cv2.resize(img_rgb, (128, 128)) / 255.0
-    img_expanded = np.expand_dims(img_resized, axis=0)
 
-    # Predictions
-    pred_age, pred_eth = model.predict(img_expanded)
-    pred_age = int(pred_age[0][0])
-    pred_eth = np.argmax(pred_eth)
+    # Resize
+    img_resized = cv2.resize(img_rgb, (128,128))
+    img_norm = img_resized / 255.0
+    img_input = np.expand_dims(img_norm, axis=0)
 
-    ethnicity_map = {0:"White", 1:"Black", 2:"Asian", 3:"Indian", 4:"Others"}
+    # Predict
+    pred_age, pred_ethnicity = model.predict(img_input)
 
-    st.image(img_rgb, caption="Uploaded Image", use_column_width=True)
-    st.write(f"**Predicted Age:** {pred_age}")
-    st.write(f"**Predicted Ethnicity:** {ethnicity_map[pred_eth]}")
+    # Results
+    age = int(pred_age[0][0])
+    ethnicity_idx = np.argmax(pred_ethnicity[0])
+    ethnicity_labels = ["White", "Black", "Asian", "Indian", "Others"]
+    ethnicity = ethnicity_labels[ethnicity_idx]
+
+    # Show
+    st.image(img_rgb, caption=f"Predicted Age: {age}, Ethnicity: {ethnicity}", use_column_width=True)
+    st.write(f"### Predicted Age: {age}")
+    st.write(f"### Predicted Ethnicity: {ethnicity}")
