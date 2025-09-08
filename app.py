@@ -1,19 +1,22 @@
-
 import streamlit as st
 import numpy as np
 import cv2
 import tensorflow as tf
 from tensorflow.keras.models import Model
 from tensorflow.keras.applications import EfficientNetB0
-from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout, Flatten
 
 # -------------------
 # Build model (must match training)
 # -------------------
 def build_model():
-    base_model = EfficientNetB0(weights=None, include_top=False, input_shape=(128,128,3))  # RGB input
+    # Use weights=None to avoid downloading weights from a URL
+    base_model = EfficientNetB0(weights=None, include_top=False, input_shape=(128, 128, 3))
     x = base_model.output
-    x = GlobalAveragePooling2D()(x)
+
+    # The original model weights were saved using a Flatten layer, not GlobalAveragePooling2D.
+    # We must use Flatten to match the architecture of the saved weights.
+    x = Flatten()(x)
     x = Dropout(0.5)(x)
 
     # Age head
@@ -29,7 +32,12 @@ def build_model():
 # Load weights (not the whole model)
 # -------------------
 model = build_model()
-model.load_weights("EthnoAgeNet.h5")
+try:
+    model.load_weights("EthnoAgeNet.h5")
+    st.success("Model weights loaded successfully!")
+except Exception as e:
+    st.error(f"Error loading model weights: {e}")
+    st.stop()
 
 # -------------------
 # Streamlit UI
@@ -45,7 +53,7 @@ if uploaded_file is not None:
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # Convert to RGB
 
     # Preprocess
-    img_resized = cv2.resize(img_rgb, (128,128))
+    img_resized = cv2.resize(img_rgb, (128, 128))
     img_norm = img_resized / 255.0
     img_input = np.expand_dims(img_norm, axis=0)
 
@@ -62,4 +70,3 @@ if uploaded_file is not None:
     st.image(img_rgb, caption=f"Predicted Age: {age}, Ethnicity: {ethnicity}", use_column_width=True)
     st.write(f"### Predicted Age: {age}")
     st.write(f"### Predicted Ethnicity: {ethnicity}")
-
