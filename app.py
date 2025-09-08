@@ -7,16 +7,20 @@ from tensorflow.keras.applications import EfficientNetB0
 from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout, Flatten
 
 # -------------------
-# Build model (must match training)
+# Build model with pre-trained weights
 # -------------------
 def build_model():
-    # Use weights=None to avoid downloading weights from a URL
-    base_model = EfficientNetB0(weights=None, include_top=False, input_shape=(128, 128, 3))
-    x = base_model.output
+    # Load the EfficientNetB0 base model with weights pre-trained on ImageNet.
+    # We include a custom input shape to match your image preprocessing.
+    base_model = EfficientNetB0(
+        weights="imagenet",
+        include_top=False,
+        input_shape=(128, 128, 3)
+    )
 
-    # The original model weights were saved using a Flatten layer, not GlobalAveragePooling2D.
-    # We must use Flatten to match the architecture of the saved weights.
-    x = Flatten()(x)
+    # Use a pooling layer to summarize the features from the base model
+    x = base_model.output
+    x = GlobalAveragePooling2D()(x)
     x = Dropout(0.5)(x)
 
     # Age head
@@ -29,20 +33,23 @@ def build_model():
     return model
 
 # -------------------
-# Load weights (not the whole model)
+# Load the pre-trained model
 # -------------------
-model = build_model()
+# We no longer need to load a separate H5 file because the model is pre-trained.
+# The weights are loaded when we build the model.
 try:
-    model.load_weights("EthnoAgeNet.h5")
-    st.success("Model weights loaded successfully!")
+    model = build_model()
+    st.success("Pre-trained model loaded successfully!")
 except Exception as e:
-    st.error(f"Error loading model weights: {e}")
+    st.error(f"Error loading the model. This might be due to a dependency issue: {e}")
     st.stop()
+
 
 # -------------------
 # Streamlit UI
 # -------------------
 st.title("EthnoAgeNet - Age & Ethnicity Prediction")
+st.write("This app uses a pre-trained model to predict age and ethnicity from an uploaded image.")
 
 uploaded_file = st.file_uploader("Upload a face image", type=["jpg", "jpeg", "png"])
 
@@ -58,10 +65,10 @@ if uploaded_file is not None:
     img_input = np.expand_dims(img_norm, axis=0)
 
     # Predict
-    pred_age, pred_ethnicity = model.predict(img_input)
+    pred_age, pred_ethnicity = model.predict(img_input, verbose=0)
 
     # Results
-    age = int(pred_age[0][0])
+    age = int(np.round(pred_age[0][0]))
     ethnicity_idx = np.argmax(pred_ethnicity[0])
     ethnicity_labels = ["White", "Black", "Asian", "Indian", "Others"]
     ethnicity = ethnicity_labels[ethnicity_idx]
